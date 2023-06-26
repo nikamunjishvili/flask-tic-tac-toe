@@ -1,5 +1,5 @@
 from easyAI import TwoPlayerGame, Human_Player, AI_Player, Negamax
-from flask import Flask, render_template_string, request, make_response
+from flask import Flask, render_template_string, request, make_response, jsonify
 
 class TicTacToe(TwoPlayerGame):
     """The board positions are numbered as follows:
@@ -75,13 +75,32 @@ class TicTacToe(TwoPlayerGame):
     def winner(self):
         if self.lose(who=2):
             return "AI Wins"
+        if self.lose(who=1):
+            return "You Win"
         return "Tie"
 
 
 TEXT = """
 <!doctype html>
 <html>
-  <head><title>Tic Tac Toe</title></head>
+  <head>
+    <title>Tic Tac Toe</title>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+      function showAlert(message) {
+        Swal.fire({
+          title: message,
+          icon: "info",
+          confirmButtonText: "OK",
+          allowOutsideClick: false,
+        }).then(function (result) {
+          if (result.isConfirmed) {
+            location.reload();
+          }
+        });
+      }
+    </script>
+  </head>
   <body>
     <h1>Tic Tac Toe</h1>
     <h2>{{msg}}</h2>
@@ -91,8 +110,12 @@ TEXT = """
         <tr>
           {% for i in range(0, 3) %}
           <td>
-            <button type="submit" name="choice" value="{{j*3+i+1}}"
-             {{"disabled" if ttt.spot_string(i, j)!="_"}}>
+            <button
+              type="submit"
+              name="choice"
+              value="{{j*3+i+1}}"
+              {{"disabled" if ttt.spot_string(i, j)!="_"}}
+            >
               {{ttt.spot_string(i, j)}}
             </button>
           </td>
@@ -102,6 +125,11 @@ TEXT = """
       </table>
       <button type="submit" name="reset">Start Over</button>
     </form>
+    <script>
+      {% if msg == "You Win" or msg == "AI Wins" %}
+        showAlert("{{msg}}");
+      {% endif %}
+    </script>
   </body>
 </html>
 """
@@ -118,15 +146,21 @@ def play_game():
         ttt.board = [int(x) for x in game_cookie.split(",")]
     if "choice" in request.form:
         ttt.play_move(request.form["choice"])
-        if not ttt.is_over():
-            ai_move = ttt.get_move()
-            ttt.play_move(ai_move)
+        if ttt.is_over():
+            msg = ttt.winner()
+            resp = make_response(render_template_string(TEXT, ttt=ttt, msg=msg))
+            resp.set_cookie("game_board", "", expires=0)
+            return resp
+        ai_move = ttt.get_move()
+        ttt.play_move(ai_move)
+        if ttt.is_over():
+            msg = ttt.winner()
+            resp = make_response(render_template_string(TEXT, ttt=ttt, msg=msg))
+            resp.set_cookie("game_board", "", expires=0)
+            return resp
     if "reset" in request.form:
         ttt.board = [0 for _ in range(9)]
-    if ttt.is_over():
-        msg = ttt.winner()
-    else:
-        msg = "Play Move"
+    msg = "Play Move"
     resp = make_response(render_template_string(TEXT, ttt=ttt, msg=msg))
     c = ",".join(map(str, ttt.board))
     resp.set_cookie("game_board", c)
